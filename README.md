@@ -17,7 +17,7 @@ You can install the required dependencies using pip:
 
 bash
 ```
-pip install pandas requests python-dotenv sqlalchemy mysql pymysql
+pip install -r requirements.txt
 ```
 
 ## Usage
