@@ -1,15 +1,14 @@
 import requests
 import os
 from enum import Enum
-from typing import Literal, Union
 from warnings import warn
 
 from bs4 import BeautifulSoup
 import pandas as pd
 from dotenv import load_dotenv
 import sqlalchemy
-from sqlalchemy import Column, String, Integer, CHAR, Table, text
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, String, CHAR, Table, text
+
 
 load_dotenv()
 
@@ -65,7 +64,7 @@ class Models:
         REIT = "受益證券-不動產投資信託"
         OTC_WARRANT = "上櫃認購(售)權證"
         INDEX = "指數"
-        
+
         @property
         def lower_name(self) -> str:
             return self.name.lower()
@@ -142,12 +141,12 @@ def download_codes(
 
 
 def get(
+    category: Models.CodesCategory = Models.CodesCategory.STOCK,
     cache: bool = True,
     from_csv: bool = False,
     file_path: str = "codes.csv",
     details: bool = True,
     table_name: str = "twse",
-    category: Models.CodesCategory = Models.CodesCategory.STOCK,
 ) -> pd.Series | pd.DataFrame:
     """
     Retrieves stock codes from a SQL database or a CSV file. If the database is not accessible or empty,
@@ -171,6 +170,7 @@ def get(
         cache_file = os.path.join(cache_path, category.lower_name + ".csv")
         if os.path.exists(cache_file):
             codes = pd.read_csv(cache_file)
+
     if from_csv is False and codes is None:
         try:
             with engine.connect() as conn:
@@ -189,10 +189,17 @@ def get(
 
     if codes is None or codes.empty:
         codes = pd.read_csv(file_path)
+        codes = (
+            codes.where(codes[Models.CodesData.CATEGORY.short_name] == category.value)
+            .dropna(subset=Models.CodesData.SYMBOL.short_name)
+            .reset_index(drop=True)
+        )
+    if codes is None or len(codes) == 0:
+        raise LookupError("No codes found in CSV file.")
 
     cache_file = os.path.join(cache_path, category.lower_name + ".csv")
     codes.to_csv(cache_file, index=False)
-    
+
     if details is False:
         codes = codes[Models.CodesData.SYMBOL.short_name]
     return codes
@@ -251,7 +258,7 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
 
 def main():
 
-    print(get(from_csv=True))
+    print(get())
 
 
 if __name__ == "__main__":
