@@ -61,5 +61,8 @@ The data is retrieved from the following URLs:
 - FUTURE: https://isin.twse.com.tw/isin/C_public.jsp?strMode=11
 
 # License
-This project is licensed under the MIT License - see the LICENSE file for details.
-Feel free to customize it further according to your specific needs!
+Distributed under the MIT License. See `LICENSE.txt` for more information.
+
+# Contact
+Tsui Ho Ming - edwin.tsui919@gmail.com
+Project Link: https://github.com/fighterming/twse-codes
