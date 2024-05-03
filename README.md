@@ -56,9 +56,9 @@ codes = get(details=True)
 Source URLs
 The data is retrieved from the following URLs:
 
-TWS https://isin.twse.com.tw/isin/C_public.jsp?strMode=2
-OTC https://isin.twse.com.tw/isin/C_public.jsp?strMode=4
-FUTURE https://isin.twse.com.tw/isin/C_public.jsp?strMode=11
+TWS: https://isin.twse.com.tw/isin/C_public.jsp?strMode=2
+OTC: https://isin.twse.com.tw/isin/C_public.jsp?strMode=4
+FUTURE: https://isin.twse.com.tw/isin/C_public.jsp?strMode=11
 
 # License
 This project is licensed under the MIT License - see the LICENSE file for details.
