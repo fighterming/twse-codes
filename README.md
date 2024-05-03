@@ -65,4 +65,5 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 
 # Contact
 Tsui Ho Ming - edwin.tsui919@gmail.com
+
 Project Link: https://github.com/fighterming/twse-codes
