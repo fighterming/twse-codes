@@ -2,6 +2,7 @@ import requests
 import os
 from enum import Enum
 from typing import Literal, Union
+from warnings import warn
 
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -25,6 +26,69 @@ FUTURE_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=11"
 engine = sqlalchemy.create_engine(
     f"mariadb+pymysql://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_ADDRESS}:{SQL_PORT}/?charset=utf8"
 )
+
+
+class Models:
+
+    class CodesData(Enum):
+        SYMBOL = "sc", "代號"
+        NAME = "cn", "名稱"
+        CATEGORY = "ca", "類別"
+        ISIN_CODE = "ic", "國際證券辨識號碼(ISIN Code)"
+        DATE_OF_LISTING = "dl", "上市日"
+        MARKET_TYPE = "ma", "市場別"
+        INDUSTRY = "si", "產業別"
+        CFICODE = "cc", "CFICode"
+        NOTES = "no", "備註"
+
+        @classmethod
+        def get_columns_short(cls):
+            return [x.value[0] for x in cls.__members__.values()]
+
+        @classmethod
+        def get_columns_long(cls):
+            return [x.value[1] for x in cls.__members__.values()]
+
+        @property
+        def short_name(self) -> str:
+            return self.value[0]
+
+    class CodesCategory(Enum):
+        STOCK = "股票"
+        WARRANT = "上市認購(售)權證"
+        SPECIAL_STOCK = "特別股"
+        INNOVATION_BOARD = "創新板"
+        ETF = "ETF"
+        ETN = "ETN"
+        TDR = "臺灣存託憑證(TDR)"
+        ASSET_BASED_SECURITIES = "受益證券-資產基礎證券"
+        REIT = "受益證券-不動產投資信託"
+        OTC_WARRANT = "上櫃認購(售)權證"
+        INDEX = "指數"
+        
+        @property
+        def lower_name(self) -> str:
+            return self.name.lower()
+
+    # depreciated
+    @property
+    def sql_table() -> Table:
+        mc = Models.CodesData
+        sql_table = Table(
+            "twse",
+            Column(mc.SYMBOL.short_name, CHAR, primary_key=True),
+            Column(mc.NAME.short_name, CHAR),
+            Column(mc.CATEGORY.short_name, CHAR),
+            Column(mc.ISIN_CODE.short_name, CHAR),
+            Column(mc.DATE_OF_LISTING.short_name, CHAR),
+            Column(mc.MARKET_TYPE.short_name, CHAR),
+            Column(mc.INDUSTRY.short_name, CHAR),
+            Column(mc.CFICODE.short_name, CHAR),
+            Column(mc.NOTES.short_name, CHAR),
+            mysql_engine="InnoDB",
+            mysql_charset="utf8mb4",
+            mysql_key_block_size="1024",
+        )
 
 
 def download_codes(
@@ -78,7 +142,12 @@ def download_codes(
 
 
 def get(
-    file_path: str = "codes.csv", details: bool = True, table_name: str = "twse"
+    cache: bool = True,
+    from_csv: bool = False,
+    file_path: str = "codes.csv",
+    details: bool = True,
+    table_name: str = "twse",
+    category: Models.CodesCategory = Models.CodesCategory.STOCK,
 ) -> pd.Series | pd.DataFrame:
     """
     Retrieves stock codes from a SQL database or a CSV file. If the database is not accessible or empty,
@@ -97,60 +166,36 @@ def get(
                                   containing only the stock symbols.
     """
     codes = None
-    with engine.connect() as conn:
-        if verify_database(conn, table_name=table_name):
-            codes = pd.read_sql("*", conn, schema=SQL_SCHEMA, table_name=table_name)
+    cache_path = os.path.join(".", "cache")
+    if cache is True:
+        cache_file = os.path.join(cache_path, category.lower_name + ".csv")
+        if os.path.exists(cache_file):
+            codes = pd.read_csv(cache_file)
+    if from_csv is False and codes is None:
+        try:
+            with engine.connect() as conn:
+                if verify_database(conn, table_name=table_name):
+                    if category is not None:
+                        where = f"WHERE {Models.CodesData.CATEGORY.short_name} = '{category.value}'"
+                    columns = ", ".join(Models.CodesData.get_columns_short())
+                    table = f"`{SQL_SCHEMA}`.`{table_name}`"
+                    query = f"SELECT {columns} FROM {table} {where}"
+                    print(query)
+                    codes = pd.read_sql(query, conn)
+                    if len(codes) == 0:
+                        warn("No codes found in SQL database.")
+        except sqlalchemy.ExceptionContext as e:
+            warn("Error connecting to SQL database: " + str(e))
 
     if codes is None or codes.empty:
         codes = pd.read_csv(file_path)
-        if details is False:
-            codes = codes[Models.CodesData.SYMBOL.short_name]
 
+    cache_file = os.path.join(cache_path, category.lower_name + ".csv")
+    codes.to_csv(cache_file, index=False)
+    
+    if details is False:
+        codes = codes[Models.CodesData.SYMBOL.short_name]
     return codes
-
-class Models:
-
-    class CodesData(Enum):
-        SYMBOL = "sc", "代號"
-        NAME = "cn", "名稱"
-        CATEGORY = "ca", "類別"
-        ISIN_CODE = "ic", "國際證券辨識號碼(ISIN Code)"
-        DATE_OF_LISTING = "dl", "上市日"
-        MARKET_TYPE = "ma", "市場別"
-        INDUSTRY = "si", "產業別"
-        CFICODE = "cc", "CFICode"
-        NOTES = "no", "備註"
-
-        @classmethod
-        def get_columns_short(cls):
-            return [x.value[0] for x in cls.__members__.values()]
-
-        @classmethod
-        def get_columns_long(cls):
-            return [x.value[1] for x in cls.__members__.values()]
-
-        @property
-        def short_name(self) -> str:
-            return self.value[0]
-
-    @property
-    def sql_table() -> Table:
-        mc = Models.CodesData
-        sql_table = Table(
-            "twse",
-            Column(mc.SYMBOL.short_name, CHAR, primary_key=True),
-            Column(mc.NAME.short_name, CHAR),
-            Column(mc.CATEGORY.short_name, CHAR),
-            Column(mc.ISIN_CODE.short_name, CHAR),
-            Column(mc.DATE_OF_LISTING.short_name, CHAR),
-            Column(mc.MARKET_TYPE.short_name, CHAR),
-            Column(mc.INDUSTRY.short_name, CHAR),
-            Column(mc.CFICODE.short_name, CHAR),
-            Column(mc.NOTES.short_name, CHAR),
-            mysql_engine="InnoDB",
-            mysql_charset="utf8mb4",
-            mysql_key_block_size="1024",
-        )
 
 
 def verify_database(conn, table_name: str = None, create: bool = False) -> bool:
@@ -192,24 +237,21 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
         for row in table.find_all("tr")[1:]:
             all_td = row.find_all("td")
             if len(all_td) <= 1:
-                category = all_td[0].get_text()
+                category = all_td[0].get_text().strip()
             else:
                 dataset = [td.get_text() for td in all_td]
 
                 symbol_column = dataset[0].split("　")
                 dataset.insert(1, category)
-                dataset.insert(0, symbol_column[0].replace(" ",""))
+                dataset.insert(0, symbol_column[0].replace(" ", ""))
                 dataset[1] = symbol_column[1]
                 datasets.append(dataset)
     return pd.DataFrame(datasets, columns=headings)
 
 
-
-
-
-
 def main():
-    download_codes(to_sql=True, to_csv=False)
+
+    print(get(from_csv=True))
 
 
 if __name__ == "__main__":
