@@ -3,12 +3,11 @@ import os
 from enum import Enum
 from warnings import warn
 
-from bs4 import BeautifulSoup
 import pandas as pd
 from dotenv import load_dotenv
-import sqlalchemy
+from bs4 import BeautifulSoup
+from sqlalchemy import create_engine, ExceptionContext, schema
 from sqlalchemy import Column, String, CHAR, Table, text
-
 
 load_dotenv()
 
@@ -22,7 +21,7 @@ TABLE_NAME = "twse"
 TWS_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2"
 OTC_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=4"
 FUTURE_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=11"
-engine = sqlalchemy.create_engine(
+engine = create_engine(
     f"mariadb+pymysql://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_ADDRESS}:{SQL_PORT}/?charset=utf8"
 )
 
@@ -143,7 +142,8 @@ def download_codes(
 def get(
     category: Models.CodesCategory = Models.CodesCategory.STOCK,
     cache: bool = True,
-    from_csv: bool = False,
+    from_sql: bool = True,
+    from_csv: bool = True,
     file_path: str = "codes.csv",
     details: bool = True,
     table_name: str = "twse",
@@ -164,6 +164,7 @@ def get(
                                   containing detailed information about each stock code or a pandas Series
                                   containing only the stock symbols.
     """
+
     codes = None
     cache_path = os.path.join(".", "cache")
     if cache is True:
@@ -171,7 +172,7 @@ def get(
         if os.path.exists(cache_file):
             codes = pd.read_csv(cache_file)
 
-    if from_csv is False and codes is None:
+    if from_sql and codes is None:
         try:
             with engine.connect() as conn:
                 if verify_database(conn, table_name=table_name):
@@ -184,16 +185,19 @@ def get(
                     codes = pd.read_sql(query, conn)
                     if len(codes) == 0:
                         warn("No codes found in SQL database.")
-        except sqlalchemy.ExceptionContext as e:
+        except ExceptionContext as e:
             warn("Error connecting to SQL database: " + str(e))
 
     if codes is None or codes.empty:
-        codes = pd.read_csv(file_path)
-        codes = (
-            codes.where(codes[Models.CodesData.CATEGORY.short_name] == category.value)
-            .dropna(subset=Models.CodesData.SYMBOL.short_name)
-            .reset_index(drop=True)
-        )
+        if from_csv is False:
+            codes = pd.read_csv(file_path)
+            codes = (
+                codes.where(
+                    codes[Models.CodesData.CATEGORY.short_name] == category.value
+                )
+                .dropna(subset=Models.CodesData.SYMBOL.short_name)
+                .reset_index(drop=True)
+            )
     if codes is None or len(codes) == 0:
         raise LookupError("No codes found in CSV file.")
 
@@ -205,13 +209,17 @@ def get(
     return codes
 
 
+def get_stocks_details() -> pd.DataFrame:
+    get(Models.CodesCategory.STOCK, cache=True)
+
+
 def verify_database(conn, table_name: str = None, create: bool = False) -> bool:
     if not conn.dialect.has_schema(conn, SQL_SCHEMA):
         print(UserWarning(f"Schema {SQL_SCHEMA} does not exist."))
         if not create:
             return False
         else:
-            conn.execute(sqlalchemy.schema.CreateSchema(SQL_SCHEMA))
+            conn.execute(schema.CreateSchema(SQL_SCHEMA))
     if table_name is not None:
         if not conn.dialect.has_table(conn, table_name, schema=SQL_SCHEMA):
             print(UserWarning(f"Table {table_name} does not exist."))
@@ -262,4 +270,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
