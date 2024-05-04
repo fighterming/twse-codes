@@ -165,7 +165,8 @@ def get(
     """
 
     codes = None
-    cache_path = os.path.join(".", "cache")
+    file_path = os.path.dirname(__file__)
+    cache_path = os.path.join(file_path, "cache")
     if cache is True:
         cache_file = os.path.join(cache_path, category.lower_name + ".csv")
         if os.path.exists(cache_file):
@@ -180,7 +181,6 @@ def get(
                     columns = ", ".join(Models.CodesData.get_columns_short())
                     table = f"`{SQL_SCHEMA}`.`{table_name}`"
                     query = f"SELECT {columns} FROM {table} {where}"
-                    print(query)
                     codes = pd.read_sql(query, conn)
                     if len(codes) == 0:
                         warn("No codes found in SQL database.")
@@ -200,6 +200,7 @@ def get(
     if codes is None or len(codes) == 0:
         raise LookupError("No codes found in CSV file.")
 
+    os.path.exists(cache_path) or os.mkdir(cache_path)
     cache_file = os.path.join(cache_path, category.lower_name + ".csv")
     codes.to_csv(cache_file, index=False)
 
@@ -230,7 +231,7 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
     html = requests.get(url)
     if html.status_code != 200:
         raise ConnectionError("Download request failed.")
-    soup = BeautifulSoup(html.content, "html.parser")
+    soup = BeautifulSoup(html.text, "html.parser")
     table = soup.find("table", attrs={"class": "h4"})
     headings = Models.CodesData.get_columns_short()
     datasets = []
@@ -254,7 +255,6 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
                 category = all_td[0].get_text().strip()
             else:
                 dataset = [td.get_text() for td in all_td]
-
                 symbol_column = dataset[0].split("　")
                 dataset.insert(1, category)
                 dataset.insert(0, symbol_column[0].replace(" ", ""))
