@@ -136,7 +136,6 @@ def download_codes(
             )
     if output is True:
         return df
-    print(df)
 
 
 def get(
@@ -265,10 +264,28 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        prog="codes.py",
+        description="""Downloads the latest TWSE stock codes and saves them to a CSV file or to a SQL database""",
+    )
+    parser.add_argument(
+        "-d", "--download", action="store_true", help="Download codes from TWSE"
+    )
+    parser.add_argument(
+        "-g", "--get", action="store_true", help="Get codes from database"
+    )
 
-    print(get())
+    args = parser.parse_args()
+
+    if args.download:
+        ret = download_codes(to_csv=True, to_sql=True, output=True)
+    if args.get:
+        ret = get(cache=True, from_sql=True, from_csv=True, details=True)
+
+    print(ret)
 
 
 if __name__ == "__main__":
+    import argparse
 
     main()
