@@ -1,8 +1,0 @@
-python-dotenv
-requests
-pandas
-beautifulsoup4
-SQLAlchemy
-mysqlclient
-PyMySQL
-
