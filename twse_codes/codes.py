@@ -9,21 +9,25 @@ from bs4 import BeautifulSoup
 from sqlalchemy import create_engine, ExceptionContext, schema
 from sqlalchemy import Column, String, CHAR, Table, text
 
-load_dotenv()
 
-SQL_USERNAME = os.environ.get("SQL_USERNAME")
-SQL_PASSWORD = os.environ.get("SQL_PASSWORD")
-SQL_ADDRESS = os.environ.get("SQL_ADDRESS")
-SQL_PORT = os.environ.get("SQL_PORT")
 SQL_SCHEMA = "mt_symbols"
 TABLE_NAME = "twse"
-
 TWS_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2"
 OTC_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=4"
 FUTURE_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=11"
-engine = create_engine(
-    f"mariadb+pymysql://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_ADDRESS}:{SQL_PORT}/?charset=utf8"
-)
+
+
+def get_sql_engine():
+    SQL_USERNAME = os.environ.get("SQL_USERNAME")
+    SQL_PASSWORD = os.environ.get("SQL_PASSWORD")
+    SQL_ADDRESS = os.environ.get("SQL_ADDRESS")
+    SQL_PORT = os.environ.get("SQL_PORT")
+    if any(val is None for val in [SQL_USERNAME, SQL_PASSWORD, SQL_ADDRESS, SQL_PORT]):
+        return None
+    else:
+        return create_engine(
+            f"mariadb+pymysql://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_ADDRESS}:{SQL_PORT}/?charset=utf8"
+        )
 
 
 class Models:
@@ -117,23 +121,25 @@ def download_codes(
     if to_csv is True:
         df.to_csv(file_path, index=False)
     if to_sql is True:
-        with engine.connect() as conn:
-            verify_database(conn, create=True)
-            df.to_sql(
-                table_name,
-                conn,
-                schema=SQL_SCHEMA,
-                index=False,
-                if_exists="replace",
-            )
-            pk = Models.CodesData.SYMBOL.short_name
-            conn.execute(
-                text(
-                    f"ALTER TABLE `{SQL_SCHEMA}`.`twse` "
-                    f"CHANGE COLUMN `{pk}` `{pk}` {String(20)} NOT NULL, "
-                    f"ADD PRIMARY KEY (`{pk}`);"
+        engine = get_sql_engine()
+        if engine:
+            with engine.connect() as conn:
+                verify_database(conn, create=True)
+                df.to_sql(
+                    table_name,
+                    conn,
+                    schema=SQL_SCHEMA,
+                    index=False,
+                    if_exists="replace",
                 )
-            )
+                pk = Models.CodesData.SYMBOL.short_name
+                conn.execute(
+                    text(
+                        f"ALTER TABLE `{SQL_SCHEMA}`.`twse` "
+                        f"CHANGE COLUMN `{pk}` `{pk}` {String(20)} NOT NULL, "
+                        f"ADD PRIMARY KEY (`{pk}`);"
+                    )
+                )
     if output is True:
         return df
 
@@ -173,19 +179,21 @@ def get(
             codes = pd.read_csv(cache_file)
 
     if from_sql and codes is None:
-        try:
-            with engine.connect() as conn:
-                if verify_database(conn, table_name=table_name):
-                    if category is not None:
-                        where = f"WHERE {Models.CodesData.CATEGORY.short_name} = '{category.value}'"
-                    columns = ", ".join(Models.CodesData.get_columns_short())
-                    table = f"`{SQL_SCHEMA}`.`{table_name}`"
-                    query = f"SELECT {columns} FROM {table} {where}"
-                    codes = pd.read_sql(query, conn)
-                    if len(codes) == 0:
-                        warn("No codes found in SQL database.")
-        except ExceptionContext as e:
-            warn("Error connecting to SQL database: " + str(e))
+        engine = get_sql_engine()
+        if engine:
+            try:
+                with engine.connect() as conn:
+                    if verify_database(conn, table_name=table_name):
+                        if category is not None:
+                            where = f"WHERE {Models.CodesData.CATEGORY.short_name} = '{category.value}'"
+                        columns = ", ".join(Models.CodesData.get_columns_short())
+                        table = f"`{SQL_SCHEMA}`.`{table_name}`"
+                        query = f"SELECT {columns} FROM {table} {where}"
+                        codes = pd.read_sql(query, conn)
+                        if len(codes) == 0:
+                            warn("No codes found in SQL database.")
+            except ExceptionContext as e:
+                warn("Error connecting to SQL database: " + str(e))
 
     if codes is None or codes.empty:
         if from_csv is False:
@@ -264,6 +272,7 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
 
 
 def main():
+    load_dotenv()
     parser = argparse.ArgumentParser(
         prog="codes.py",
         description="""Downloads the latest TWSE stock codes and saves them to a CSV file or to a SQL database""",
