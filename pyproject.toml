@@ -5,7 +5,7 @@ description = "fetch available codes from TWSE"
 authors = ["Tsui Ho Ming <fighterming@gmail.com>"]
 license = "LICENSE"
 readme = "README.md"
-
+packages = [{ include = "twse_codes" }]
 [tool.poetry.dependencies]
 python = "^3.10"
 
