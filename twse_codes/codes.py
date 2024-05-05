@@ -218,7 +218,9 @@ def get(
 
 
 def get_stocks_list() -> list:
-    return get(Models.CodesCategory.STOCK, cache=True).astype(str).to_list()
+    return (
+        get(Models.CodesCategory.STOCK, cache=True, details=False).astype(str).to_list()
+    )
 
 
 def get_stocks_details() -> pd.DataFrame:
