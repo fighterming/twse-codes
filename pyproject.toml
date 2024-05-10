@@ -9,13 +9,11 @@ packages = [{ include = "twse_codes" }]
 
 [tool.poetry.dependencies]
 python = "^3"
-python-dotenv = "^1"
 requests = "^2"
 pandas = "^2"
 beautifulsoup4 = "^4"
 sqlalchemy = "^2"
-mysqlclient = "^2"
-pymysql = "==1.1.0"
+
 
 
 [build-system]

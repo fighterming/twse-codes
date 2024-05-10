@@ -8,9 +8,6 @@ python modules:
 - requests
 - python-dotenv
 - sqlalchemy
-- mysql
-- PyMySQL
-
 # Installation
 
 You can install the required dependencies using pip:
@@ -24,41 +21,35 @@ pip install -r requirements.txt
 
 
 ## Environment Variables
-Before running the module, make sure to set up your environment variables in a .env file. Here's an example .env file:
-```
-SQL_USERNAME=your_sql_username
-SQL_PASSWORD=your_sql_password
-SQL_ADDRESS=your_sql_address
-SQL_PORT=your_sql_port
-```
+
 
 
 ## Download Codes
-To download codes from TWSE and store them in a SQL database:
+To download all available symbols from TWSE and store them in a SQL database:
 python
 ```
 from twse_codes_downloader import download_codes
 
-download_codes(to_sql=True, to_csv=False)
+download_codes()
 ```
 This will download the codes from TWSE's website and store them in a SQL database.
 
 
 ## Retrieve Codes
-To retrieve codes from a CSV file:
+To retrieve codes:
 ```
-from twse_codes_downloader import get
+from twse_codes import codes
 
-codes = get(details=True)
+codes.get(category="all")
 ```
 
 # References
 Source URLs
 The data is retrieved from the following URLs:
 
-- TWS: https://isin.twse.com.tw/isin/C_public.jsp?strMode=2
-- OTC: https://isin.twse.com.tw/isin/C_public.jsp?strMode=4
-- FUTURE: https://isin.twse.com.tw/isin/C_public.jsp?strMode=11
+TWS: https://isin.twse.com.tw/isin/C_public.jsp?strMode=2 
+OTC: https://isin.twse.com.tw/isin/C_public.jsp?strMode=4 
+FUTURE: https://isin.twse.com.tw/isin/C_public.jsp?strMode=11 
 
 # License
 Distributed under the MIT License. See `LICENSE.txt` for more information.

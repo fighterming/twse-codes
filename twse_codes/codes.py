@@ -2,32 +2,23 @@ import requests
 import os
 from enum import Enum
 from warnings import warn
-
+from typing import Literal
 import pandas as pd
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
-from sqlalchemy import create_engine, ExceptionContext, schema
-from sqlalchemy import Column, String, CHAR, Table, text
+from sqlalchemy import create_engine, ExceptionContext, MetaData
+from sqlalchemy import Column, String, Integer, Table, text
 
 
-SQL_SCHEMA = "mt_symbols"
-TABLE_NAME = "twse"
-TWS_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2"
-OTC_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=4"
-FUTURE_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=11"
+_TABLE_NAME = "twse"
+_TWS_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2"
+_OTC_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=4"
+_FUTURE_URL = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=11"
 
 
-def get_sql_engine():
-    SQL_USERNAME = os.environ.get("SQL_USERNAME")
-    SQL_PASSWORD = os.environ.get("SQL_PASSWORD")
-    SQL_ADDRESS = os.environ.get("SQL_ADDRESS")
-    SQL_PORT = os.environ.get("SQL_PORT")
-    if any(val is None for val in [SQL_USERNAME, SQL_PASSWORD, SQL_ADDRESS, SQL_PORT]):
-        return None
-    else:
-        return create_engine(
-            f"mariadb+pymysql://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_ADDRESS}:{SQL_PORT}/?charset=utf8"
-        )
+def _get_sql_engine():
+    path = os.path.abspath(os.path.dirname(__file__))
+    return create_engine(f"sqlite:///{path}/twse_codes.db")
 
 
 class Models:
@@ -73,33 +64,26 @@ class Models:
             return self.name.lower()
 
     # depreciated
-    @property
-    def sql_table() -> Table:
-        mc = Models.CodesData
-        sql_table = Table(
+    @classmethod
+    def sql_table(cls) -> Table:
+        metadata = MetaData()
+        mc = cls.CodesData
+        return Table(
             "twse",
-            Column(mc.SYMBOL.short_name, CHAR, primary_key=True),
-            Column(mc.NAME.short_name, CHAR),
-            Column(mc.CATEGORY.short_name, CHAR),
-            Column(mc.ISIN_CODE.short_name, CHAR),
-            Column(mc.DATE_OF_LISTING.short_name, CHAR),
-            Column(mc.MARKET_TYPE.short_name, CHAR),
-            Column(mc.INDUSTRY.short_name, CHAR),
-            Column(mc.CFICODE.short_name, CHAR),
-            Column(mc.NOTES.short_name, CHAR),
-            mysql_engine="InnoDB",
-            mysql_charset="utf8mb4",
-            mysql_key_block_size="1024",
+            metadata,
+            Column(mc.SYMBOL.short_name, String, primary_key=True),
+            Column(mc.NAME.short_name, String),
+            Column(mc.CATEGORY.short_name, String),
+            Column(mc.ISIN_CODE.short_name, String),
+            Column(mc.DATE_OF_LISTING.short_name, Integer),
+            Column(mc.MARKET_TYPE.short_name, String),
+            Column(mc.INDUSTRY.short_name, String),
+            Column(mc.CFICODE.short_name, String),
+            Column(mc.NOTES.short_name, String, nullable=True),
         )
 
 
-def download_codes(
-    to_csv: bool = True,
-    to_sql: bool = False,
-    file_path: str = "codes.csv",
-    output: bool = False,
-    table_name: str = "twse",
-) -> None | pd.DataFrame:
+def download_codes(output: bool = False) -> None | pd.DataFrame:
     """
     Downloads the latest TWSE stock codes and saves them to a CSV file or to a SQL database.
 
@@ -115,44 +99,56 @@ def download_codes(
 
     """
     df = pd.DataFrame()
-    for url in [TWS_URL, OTC_URL, FUTURE_URL]:
+    for url in [_TWS_URL, _OTC_URL, _FUTURE_URL]:
         dfx = _crawl_from_url(url)
         df = pd.concat([df, dfx], ignore_index=True)
-    if to_csv is True:
-        df.to_csv(file_path, index=False)
-    if to_sql is True:
-        engine = get_sql_engine()
-        if engine:
-            with engine.connect() as conn:
-                verify_database(conn, create=True)
-                df.to_sql(
-                    table_name,
-                    conn,
-                    schema=SQL_SCHEMA,
-                    index=False,
-                    if_exists="replace",
-                )
-                pk = Models.CodesData.SYMBOL.short_name
-                conn.execute(
-                    text(
-                        f"ALTER TABLE `{SQL_SCHEMA}`.`twse` "
-                        f"CHANGE COLUMN `{pk}` `{pk}` {String(20)} NOT NULL, "
-                        f"ADD PRIMARY KEY (`{pk}`);"
-                    )
-                )
-    if output is True:
+    engine = _get_sql_engine()
+    col = Models.CodesData
+    symbol_col = col.SYMBOL.short_name
+    df.sort_values(symbol_col)
+    df = df.astype(
+        {
+            col.SYMBOL.short_name: str,
+            col.NAME.short_name: str,
+            col.CATEGORY.short_name: str,
+            col.ISIN_CODE.short_name: str,
+            col.DATE_OF_LISTING.short_name: str,
+            col.MARKET_TYPE.short_name: str,
+        }
+    )
+    df.set_index(symbol_col, drop=True, inplace=True)
+
+    if engine:
+        with engine.connect() as conn:
+            result = df.to_sql(
+                _TABLE_NAME,
+                conn,
+                index=True,
+                if_exists="replace",
+            )
+    if not result:
+        raise ConnectionRefusedError("Could not insert data into database")
+    else:
         return df
 
 
 def get(
-    category: Models.CodesCategory = Models.CodesCategory.STOCK,
-    cache: bool = True,
-    from_sql: bool = True,
-    from_csv: bool = True,
-    file_path: str = "codes.csv",
-    details: bool = True,
-    table_name: str = "twse",
-) -> pd.Series | pd.DataFrame:
+    category: Literal[
+        "stock",
+        "warrant",
+        "special_stock",
+        "innovation_board",
+        "etf",
+        "etn",
+        "tdr",
+        "asset_based_securities",
+        "reit",
+        "otc_warrant",
+        "index",
+        "all",
+    ] = "all",
+    download: bool = True,
+) -> pd.DataFrame:
     """
     Retrieves stock codes from a SQL database or a CSV file. If the database is not accessible or empty,
     it falls back to reading the codes from a CSV file.
@@ -169,75 +165,50 @@ def get(
                                   containing detailed information about each stock code or a pandas Series
                                   containing only the stock symbols.
     """
-
+    if category != "all":
+        category = Models.CodesCategory[category]
+        if category is None or not isinstance(category, Models.CodesCategory):
+            raise TypeError("Category must be an instance of CodesCategory.")
     codes = None
-    file_path = os.path.dirname(__file__)
-    cache_path = os.path.join(file_path, "cache")
-    if cache is True:
-        cache_file = os.path.join(cache_path, category.lower_name + ".csv")
-        if os.path.exists(cache_file):
-            codes = pd.read_csv(cache_file)
 
-    if from_sql and codes is None:
-        engine = get_sql_engine()
-        if engine:
-            try:
-                with engine.connect() as conn:
-                    if verify_database(conn, table_name=table_name):
-                        if category is not None:
-                            where = f"WHERE {Models.CodesData.CATEGORY.short_name} = '{category.value}'"
-                        columns = ", ".join(Models.CodesData.get_columns_short())
-                        table = f"`{SQL_SCHEMA}`.`{table_name}`"
-                        query = f"SELECT {columns} FROM {table} {where}"
-                        codes = pd.read_sql(query, conn)
-                        if len(codes) == 0:
-                            warn("No codes found in SQL database.")
-            except ExceptionContext as e:
-                warn("Error connecting to SQL database: " + str(e))
+    def _query():
+        engine = _get_sql_engine()
+        with engine.connect() as conn:
 
-    if codes is None or codes.empty:
-        if from_csv is False:
-            codes = pd.read_csv(file_path)
-            codes = (
-                codes.where(
-                    codes[Models.CodesData.CATEGORY.short_name] == category.value
-                )
-                .dropna(subset=Models.CodesData.SYMBOL.short_name)
-                .reset_index(drop=True)
+            where = (
+                f"WHERE {Models.CodesData.CATEGORY.short_name} = '{category.value}'"
+                if category != "all"
+                else ""
             )
+            columns = ", ".join(Models.CodesData.get_columns_short())
+            table = f"`{_TABLE_NAME}`"
+            query = f"SELECT {columns} FROM {table} {where} ORDER BY {Models.CodesData.SYMBOL.short_name}"
+            return pd.read_sql(query, conn)
+
+    codes = _query()
+    if len(codes) == 0:
+        codes = download_codes(output=True)
+
     if codes is None or len(codes) == 0:
-        raise LookupError("No codes found in CSV file.")
-
-    os.path.exists(cache_path) or os.mkdir(cache_path)
-    cache_file = os.path.join(cache_path, category.lower_name + ".csv")
-    codes.to_csv(cache_file, index=False)
-
-    if details is False:
-        codes = codes[Models.CodesData.SYMBOL.short_name]
+        raise FileExistsError("No codes found.")
     return codes
 
 
-def get_stocks_list() -> list:
-    return (
-        get(Models.CodesCategory.STOCK, cache=True, details=False).astype(str).to_list()
-    )
+def get_stocks_list() -> pd.Series:
+    return get(Models.CodesCategory.STOCK).to_list()
 
 
-def get_stocks_details() -> pd.DataFrame:
+def get_all() -> pd.DataFrame:
+    return get("all")
+
+
+def _get_stocks_details() -> pd.DataFrame:
     get(Models.CodesCategory.STOCK, cache=True)
 
 
-def verify_database(conn, table_name: str = None, create: bool = False) -> bool:
-    if not conn.dialect.has_schema(conn, SQL_SCHEMA):
-        print(UserWarning(f"Schema {SQL_SCHEMA} does not exist."))
-        if not create:
-            return False
-        else:
-            conn.execute(schema.CreateSchema(SQL_SCHEMA))
-    if table_name is not None:
-        if not conn.dialect.has_table(conn, table_name, schema=SQL_SCHEMA):
-            print(UserWarning(f"Table {table_name} does not exist."))
-            return False
+def _verify_database(conn) -> bool:
+    table = Models.sql_table()
+    table.metadata.create_all(bind=conn)
     return True
 
 
@@ -250,7 +221,7 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
     headings = Models.CodesData.get_columns_short()
     datasets = []
     category = None
-    if url == FUTURE_URL:
+    if url == _FUTURE_URL:
         category = "指數"
         for row in table.find_all("tr")[1:]:
             all_td = row.find_all("td")
@@ -293,9 +264,9 @@ def main():
     args = parser.parse_args()
 
     if args.download:
-        ret = download_codes(to_csv=True, to_sql=True, output=True)
+        ret = download_codes(output=True)
     if args.get:
-        ret = get(cache=True, from_sql=True, from_csv=True, details=True)
+        ret = get()
 
     print(ret)
 
