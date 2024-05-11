@@ -183,7 +183,6 @@ def get(
             columns = ", ".join(Models.DataColumns.get_columns_short())
             table = f"`{_TABLE_NAME}`"
             query = f"SELECT {columns} FROM {table} {where} ORDER BY {Models.DataColumns.SYMBOL.short_name}"
-            print(query)
             return pd.read_sql(query, conn)
 
     codes = _query()
