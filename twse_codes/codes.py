@@ -183,6 +183,7 @@ def get(
             columns = ", ".join(Models.DataColumns.get_columns_short())
             table = f"`{_TABLE_NAME}`"
             query = f"SELECT {columns} FROM {table} {where} ORDER BY {Models.DataColumns.SYMBOL.short_name}"
+            print(query)
             return pd.read_sql(query, conn)
 
     codes = _query()
@@ -194,8 +195,14 @@ def get(
     return codes
 
 
-def get_stocks_list() -> pd.Series:
-    return get(Models.CodesCategory.STOCK.name).to_list()
+def get_stocks() -> pd.DataFrame:
+    return get(Models.CodesCategory.STOCK.name)
+
+
+def get_stocks_list() -> list:
+    return list(
+        get(Models.CodesCategory.STOCK.name)[Models.DataColumns.SYMBOL.short_name]
+    )
 
 
 def get_all() -> pd.DataFrame:
@@ -248,6 +255,10 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
     return pd.DataFrame(datasets, columns=headings)
 
 
+def debug():
+    print(get_stocks_list())
+
+
 def main():
     load_dotenv()
     parser = argparse.ArgumentParser(
@@ -260,13 +271,17 @@ def main():
     parser.add_argument(
         "-g", "--get", action="store_true", help="Get codes from database"
     )
-
+    parser.add_argument(
+        "-b", "--debug", action="store_true", help="Get codes from database"
+    )
     args = parser.parse_args()
 
     if args.download:
         ret = download_codes(output=True)
     if args.get:
         ret = get()
+    if args.debug:
+        ret = debug()
 
     print(ret)
 
