@@ -134,17 +134,17 @@ def download_codes(output: bool = False) -> None | pd.DataFrame:
 
 def get(
     category: Literal[
-        "stock",
-        "warrant",
-        "special_stock",
-        "innovation_board",
-        "etf",
-        "etn",
-        "tdr",
-        "asset_based_securities",
-        "reit",
-        "otc_warrant",
-        "index",
+        "STOCK",
+        "WARRANT",
+        "SPECIAL_STOCK",
+        "INNOVATION_BOARD",
+        "ETF",
+        "ETN",
+        "TDR",
+        "ASSET_BASED_SECURITIES",
+        "REIT",
+        "OTC_WARRANT",
+        "INDEX",
         "all",
     ] = "all",
     download: bool = True,
@@ -166,9 +166,9 @@ def get(
                                   containing only the stock symbols.
     """
     if category != "all":
-        category = Models.CodesCategory[category]
-        if category is None or not isinstance(category, Models.CodesCategory):
-            raise TypeError("Category must be an instance of CodesCategory.")
+        if category is None or not category in Models.CodesCategory._member_names_:
+            raise TypeError("Cannot find category.")
+        category = getattr(Models.CodesCategory, category)
     codes = None
 
     def _query():
