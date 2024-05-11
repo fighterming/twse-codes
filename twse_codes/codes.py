@@ -23,7 +23,7 @@ def _get_sql_engine():
 
 class Models:
 
-    class CodesData(Enum):
+    class DataColumns(Enum):
         SYMBOL = "sc", "代號"
         NAME = "cn", "名稱"
         CATEGORY = "ca", "類別"
@@ -67,7 +67,7 @@ class Models:
     @classmethod
     def sql_table(cls) -> Table:
         metadata = MetaData()
-        mc = cls.CodesData
+        mc = cls.DataColumns
         return Table(
             "twse",
             metadata,
@@ -103,7 +103,7 @@ def download_codes(output: bool = False) -> None | pd.DataFrame:
         dfx = _crawl_from_url(url)
         df = pd.concat([df, dfx], ignore_index=True)
     engine = _get_sql_engine()
-    col = Models.CodesData
+    col = Models.DataColumns
     symbol_col = col.SYMBOL.short_name
     df.sort_values(symbol_col)
     df = df.astype(
@@ -176,13 +176,13 @@ def get(
         with engine.connect() as conn:
 
             where = (
-                f"WHERE {Models.CodesData.CATEGORY.short_name} = '{category.value}'"
+                f"WHERE {Models.DataColumns.CATEGORY.short_name} = '{category.value}'"
                 if category != "all"
                 else ""
             )
-            columns = ", ".join(Models.CodesData.get_columns_short())
+            columns = ", ".join(Models.DataColumns.get_columns_short())
             table = f"`{_TABLE_NAME}`"
-            query = f"SELECT {columns} FROM {table} {where} ORDER BY {Models.CodesData.SYMBOL.short_name}"
+            query = f"SELECT {columns} FROM {table} {where} ORDER BY {Models.DataColumns.SYMBOL.short_name}"
             return pd.read_sql(query, conn)
 
     codes = _query()
@@ -218,7 +218,7 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
         raise ConnectionError("Download request failed.")
     soup = BeautifulSoup(html.text, "html.parser")
     table = soup.find("table", attrs={"class": "h4"})
-    headings = Models.CodesData.get_columns_short()
+    headings = Models.DataColumns.get_columns_short()
     datasets = []
     category = None
     if url == _FUTURE_URL:
