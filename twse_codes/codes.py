@@ -145,16 +145,16 @@ def get(
         "REIT",
         "OTC_WARRANT",
         "INDEX",
-        "all",
-    ] = "all",
+        "ALL",
+    ] = "ALL",
     download: bool = True,
 ) -> pd.DataFrame:
     """
     Retrieves stock codes from a SQL database or a CSV file. If the database is not accessible or empty,
-    it falls back to reading the codes from a CSV file.
+    it fALLs back to reading the codes from a CSV file.
 
     Parameters:
-        file_path (str): The path to the fallback CSV file containing stock codes. Defaults to "codes.csv".
+        file_path (str): The path to the fALLback CSV file containing stock codes. Defaults to "codes.csv".
         details (bool): Determines whether to return detailed information about each stock code. If False,
                         only the stock symbols are returned. Defaults to True.
         table_name (str): The name of the table in the SQL database from which to retrieve the stock codes.
@@ -165,7 +165,7 @@ def get(
                                   containing detailed information about each stock code or a pandas Series
                                   containing only the stock symbols.
     """
-    if category != "all":
+    if category != "ALL":
         if category is None or not category in Models.CodesCategory._member_names_:
             raise TypeError("Cannot find category.")
         category = getattr(Models.CodesCategory, category)
@@ -177,7 +177,7 @@ def get(
 
             where = (
                 f"WHERE {Models.DataColumns.CATEGORY.short_name} = '{category.value}'"
-                if category != "all"
+                if category != "ALL"
                 else ""
             )
             columns = ", ".join(Models.DataColumns.get_columns_short())
@@ -195,11 +195,11 @@ def get(
 
 
 def get_stocks_list() -> pd.Series:
-    return get(Models.CodesCategory.STOCK).to_list()
+    return get(Models.CodesCategory.STOCK.name).to_list()
 
 
 def get_all() -> pd.DataFrame:
-    return get("all")
+    return get("ALL")
 
 
 def _get_stocks_details() -> pd.DataFrame:
@@ -208,7 +208,7 @@ def _get_stocks_details() -> pd.DataFrame:
 
 def _verify_database(conn) -> bool:
     table = Models.sql_table()
-    table.metadata.create_all(bind=conn)
+    table.metadata.create_ALL(bind=conn)
     return True
 
 
@@ -223,9 +223,9 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
     category = None
     if url == _FUTURE_URL:
         category = "指數"
-        for row in table.find_all("tr")[1:]:
-            all_td = row.find_all("td")
-            dataset = [td.get_text() for td in all_td]
+        for row in table.find_ALL("tr")[1:]:
+            ALL_td = row.find_ALL("td")
+            dataset = [td.get_text() for td in ALL_td]
             dataset.insert(3, "")
             dataset.insert(3, "")
             symbol_column = dataset[0].split("　")
@@ -234,12 +234,12 @@ def _crawl_from_url(url: str) -> pd.DataFrame:
             dataset[1] = symbol_column[1]
             datasets.append(dataset)
     else:
-        for row in table.find_all("tr")[1:]:
-            all_td = row.find_all("td")
-            if len(all_td) <= 1:
-                category = all_td[0].get_text().strip()
+        for row in table.find_ALL("tr")[1:]:
+            ALL_td = row.find_ALL("td")
+            if len(ALL_td) <= 1:
+                category = ALL_td[0].get_text().strip()
             else:
-                dataset = [td.get_text() for td in all_td]
+                dataset = [td.get_text() for td in ALL_td]
                 symbol_column = dataset[0].split("　")
                 dataset.insert(1, category)
                 dataset.insert(0, symbol_column[0].replace(" ", ""))
